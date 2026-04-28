@@ -252,6 +252,10 @@ func (repo *Repository) joinRoom(ctx context.Context, id string, client *pb.Clie
 		return nil, WithCode(
 			xerrors.Errorf("context done: room=%v", room.Id),
 			codes.DeadlineExceeded)
+	case <-room.Done():
+		return nil, NormalWithCode(
+			xerrors.Errorf("room done: room=%v", room.Id),
+			codes.NotFound)
 	case room.msgCh <- msg:
 	}
 
@@ -261,6 +265,10 @@ func (repo *Repository) joinRoom(ctx context.Context, id string, client *pb.Clie
 		return nil, WithCode(
 			xerrors.Errorf("context done: room=%v", room.Id),
 			codes.DeadlineExceeded)
+	case <-room.Done():
+		return nil, NormalWithCode(
+			xerrors.Errorf("room done: room=%v", room.Id),
+			codes.NotFound)
 	case ewc := <-errch:
 		return nil, ewc
 	case joined = <-jch:
