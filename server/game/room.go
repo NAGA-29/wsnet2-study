@@ -42,7 +42,8 @@ type Room struct {
 	masterOrder []ClientID
 	watchers    map[ClientID]*Client
 
-	lastMsg binary.Dict // map[clientID]unixtime_millisec
+	muLastMsg sync.RWMutex
+	lastMsg   binary.Dict // map[clientID]unixtime_millisec
 
 	logger log.Logger
 
@@ -166,18 +167,24 @@ func (r *Room) Done() <-chan struct{} {
 
 func (r *Room) writeLastMsg(cid ClientID) {
 	millisec := uint64(time.Now().UnixNano()) / 1000000
+	r.muLastMsg.Lock()
+	defer r.muLastMsg.Unlock()
 	r.lastMsg[string(cid)] = binary.MarshalULong(millisec)
 }
 
 func (r *Room) removeLastMsg(cid ClientID) {
+	r.muLastMsg.Lock()
+	defer r.muLastMsg.Unlock()
 	delete(r.lastMsg, string(cid))
 }
 
 // UpdateLastMsg : PlayerがMsgを受信したとき更新する.
 // 既に登録されているPlayerのみ書き込み (watcherを含めないため)
 func (r *Room) updateLastMsg(cid ClientID) {
-	id := string(cid)
-	if _, ok := r.lastMsg[id]; ok {
+	r.muLastMsg.Lock()
+	_, ok := r.lastMsg[string(cid)]
+	r.muLastMsg.Unlock()
+	if ok {
 		r.writeLastMsg(cid)
 	}
 }
@@ -515,7 +522,9 @@ func (r *Room) msgPing(msg *MsgPing) {
 		}
 	}
 	msg.Sender.logger.Debugf("ping %v: %v", msg.Sender.Id, msg.Timestamp)
+	r.muLastMsg.RLock()
 	ev := binary.NewEvPong(msg.Timestamp, r.RoomInfo.Watchers, r.lastMsg)
+	r.muLastMsg.RUnlock()
 	msg.Sender.SendSystemEvent(ev)
 }
 
@@ -783,6 +792,7 @@ func (r *Room) msgGetRoomInfo(msg *MsgGetRoomInfo) {
 		cis = append(cis, r.players[id].ClientInfo.Clone())
 	}
 	lmt := make(map[string]uint64)
+	r.muLastMsg.RLock()
 	for p, d := range r.lastMsg {
 		t, _, err := binary.UnmarshalAs(d, binary.TypeULong)
 		if err != nil {
@@ -790,6 +800,7 @@ func (r *Room) msgGetRoomInfo(msg *MsgGetRoomInfo) {
 		}
 		lmt[p] = t.(uint64)
 	}
+	r.muLastMsg.RUnlock()
 
 	msg.Res <- &pb.GetRoomInfoRes{
 		RoomInfo:     ri,
