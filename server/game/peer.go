@@ -2,7 +2,10 @@ package game
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
 	"errors"
+	"hash"
 	"net"
 	"sync"
 	"time"
@@ -30,6 +33,7 @@ type Peer struct {
 	client *Client
 	conn   *websocket.Conn
 	msgCh  chan binary.Msg
+	hmac   hash.Hash
 
 	done     chan struct{}
 	detached chan struct{}
@@ -45,6 +49,7 @@ func NewPeer(ctx context.Context, cli *Client, conn *websocket.Conn, lastEvSeq i
 		client: cli,
 		conn:   conn,
 		msgCh:  make(chan binary.Msg),
+		hmac:   hmac.New(sha1.New, []byte(cli.macKey)),
 
 		done:     make(chan struct{}),
 		detached: make(chan struct{}),
@@ -223,7 +228,7 @@ loop:
 		}
 		metrics.MessageRecv.Add(1)
 
-		msg, err := binary.UnmarshalMsg(p.client.hmac, data)
+		msg, err := binary.UnmarshalMsg(p.hmac, data)
 		if err != nil {
 			p.client.logger.Errorf("peer UnmarshalMsg (%v, %p): %+v", p.client.Id, p, err)
 			p.closeWithMessage(websocket.CloseInvalidFramePayloadData, err.Error())

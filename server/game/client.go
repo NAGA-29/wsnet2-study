@@ -1,9 +1,6 @@
 package game
 
 import (
-	"crypto/hmac"
-	"crypto/sha1"
-	"hash"
 	"sync"
 	"time"
 
@@ -44,7 +41,7 @@ type Client struct {
 	received     bool
 
 	authKey string
-	hmac    hash.Hash
+	macKey  string
 
 	logger log.Logger
 
@@ -85,7 +82,7 @@ func newClient(info *pb.ClientInfo, macKey string, room IRoom, isPlayer bool) (*
 		renewPeer: make(chan struct{}, 1),
 
 		authKey: RandomHex(room.ClientConf().AuthKeyLen),
-		hmac:    hmac.New(sha1.New, []byte(macKey)),
+		macKey:  macKey,
 
 		logger: room.Logger().With(log.KeyClient, info.Id),
 
